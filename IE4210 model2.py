@@ -17,14 +17,8 @@ customers = ['SLC','Albuquerque','Phoenix','SanDiego','LosAngeles','Tucson']
 site_dist_gas = 0.15
 dist_cust_gas = 0.08
 
-# site_dist_distance = [[215,524,672,258],
-#                       [444,978,770,243],
-#                       [308,276,732,471],
-#                       [291,732,617,56],
-#                       [531,287,582,766],
-#                       [148,477,476,382],
-#                       [103,685,377,189],
-#                       [222,730,259,306]]
+MATERIAL_COST = [[9,10,15],
+                 [11,7,14]]
 
 site_dist_distance = [[308,276,732,471], [291,732,617,56]]
 
@@ -51,6 +45,7 @@ y_dist_cust = LpVariable.dicts("Produce or not",(dist_centres,customers,products
 
 y_dist = LpVariable.dicts("Construct or not",(dist_centres),0,1,cat=LpInteger)
 
+# Transportation costs from site to distribution centre
 def get_site_dist_objective(site_dist_distance, site_dist_gas, site_dist_choices):
     obj = 0
     for site_index in range(len(sites)):
@@ -59,6 +54,8 @@ def get_site_dist_objective(site_dist_distance, site_dist_gas, site_dist_choices
                 obj += (site_dist_distance[site_index][dist_index] * site_dist_gas) * site_dist_choices[sites[site_index]][dist_centres[dist_index]][product]
     return obj
 
+
+# Transportation costs from distribution centre to customer and adding the variable processing costs
 def get_dist_cust_objective(dist_cust_distance, dist_cust_gas, dist_cust_choices):
     obj = 0
     for dist_index in range(len(dist_centres)):
@@ -67,11 +64,32 @@ def get_dist_cust_objective(dist_cust_distance, dist_cust_gas, dist_cust_choices
                 obj += (dist_cust_distance[dist_index][cust_index] * dist_cust_gas + variable_cost[dist_centres[dist_index]]) * dist_cust_choices[dist_centres[dist_index]][customers[cust_index]][product]
     return obj
 
+def getProductMix(MATERIAL_COST):
+    regular_ratio = (0.7,0.2,0.1)
+    green_onion_ratio = (0.3,0.15,0.55)
+    party_mix_ratio = (0.2,0.5,0.3)
+    product_mix = []
+    
+    for site in MATERIAL_COST:
+        regular = sum([regular_ratio[i]*site[i] for i in range(len(site))])
+        green_onion = sum([green_onion_ratio[i]*site[i] for i in range(len(site))])
+        party_mix = sum([party_mix_ratio[i]*site[i] for i in range(len(site))])
+        product_mix.append([regular,green_onion,party_mix])
+    return product_mix
+
 obj = get_site_dist_objective(site_dist_distance, site_dist_gas, site_dist_choices) + \
       get_dist_cust_objective(dist_cust_distance, dist_cust_gas, dist_cust_choices)
 
+# Fixed cost
 for dist_centre in y_dist:
     obj += y_dist[dist_centre] * fixed_cost[dist_centre]
+
+# Cost of purchasing raw materials for processing at site
+product_mix = getProductMix(MATERIAL_COST)
+
+for site_index in range(len(sites)):
+    for prod_index in range(len(products)):
+        obj += product_mix[site_index][prod_index] * sum([site_dist_choices[sites[site_index]][dist_centre][products[prod_index]] for dist_centre in dist_centres])
 
 prob += obj, "Total Cost"
 
@@ -181,7 +199,6 @@ for dist_centre in dist_centres:
         prob += total_incoming_product == total_outgoing_product, ""
 
 
-# print(prob)
 
 prob.solve()
 print("Status:", LpStatus[prob.status])
